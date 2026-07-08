@@ -310,9 +310,33 @@ def main() -> None:
             mlflow.log_param("best_" + k.replace("model__", ""), v)
         mlflow.log_metric("cv_mae", best_cv_mae)
 
-        # Log the refit pipeline as an MLflow model
+        # Log the refit pipeline as an MLflow model.
+        #
+        # Wrap in try/except so MLflow serialization issues NEVER break the
+        # DVC pipeline. The .pkl file (saved below via joblib.dump) is what
+        # evaluate.py and save_model.py actually need — MLflow model logging
+        # is a bonus for tracking/comparison, not a hard dependency.
+        #
+        # Known issue: MLflow 3.x's new default 'skops' serializer can't
+        # handle pandas Timestamp objects inside the FeatureEngineer's
+        # min_date_ attribute. We try cloudpickle first (which handles it),
+        # and if even that fails, we just log a warning and move on.
         best_pipeline = random_search.best_estimator_
-        mlflow.sklearn.log_model(best_pipeline, artifact_path="model")
+        try:
+            mlflow.sklearn.log_model(
+                best_pipeline,
+                name="model",
+                serialization_format="cloudpickle",
+            )
+            log.info("Logged sklearn model to MLflow (cloudpickle format).")
+        except Exception as model_log_err:
+            log.warning(
+                "Could not log sklearn model to MLflow: %s. "
+                "Pipeline will continue — the .pkl file is still saved "
+                "locally and downstream stages (evaluate, save_model) will "
+                "work normally. MLflow params/metrics are still logged.",
+                model_log_err,
+            )
 
         # Log a train data summary (mirrors original train.py)
         summary = (

@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 import shutil
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -100,6 +101,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     cfg = get_config(args)
+
+    # Make repo root importable so joblib can unpickle the Pipeline
+    # (it contains a reference to src.feature_engineering.FeatureEngineer).
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from src.feature_engineering import FeatureEngineer  # noqa: F401
 
     # --- Verify trained model exists ---
     model_path = Path(cfg["model_path"])

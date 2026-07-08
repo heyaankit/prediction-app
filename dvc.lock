@@ -28,3 +28,234 @@ stages:
       hash: md5
       md5: 5acad203895567bef9467363478e00cb
       size: 4148634
+  eda:
+    cmd: python src/2_eda.py
+    deps:
+    - path: data/processed/ingested.csv
+      hash: md5
+      md5: 5acad203895567bef9467363478e00cb
+      size: 4148634
+    - path: src/2_eda.py
+      hash: md5
+      md5: 9ecf676d4442cc39ad4e9214b5afe288
+      size: 9917
+    params:
+      params.yaml:
+        eda.input_path: data/processed/ingested.csv
+        eda.output_dir: reports/eda
+        eda.target_column: Demand
+    outs:
+    - path: reports/eda/correlation_heatmap.png
+      hash: md5
+      md5: 8f890d96b7bf1fdefc1c8bcf08563a56
+      size: 96543
+    - path: reports/eda/demand_by_category.png
+      hash: md5
+      md5: ca29f3b6c37628ee5df9cc6d04ceb397
+      size: 51058
+    - path: reports/eda/demand_by_region.png
+      hash: md5
+      md5: 874f5f65ab42fbb94bb0df7836604298
+      size: 41911
+    - path: reports/eda/demand_by_weather.png
+      hash: md5
+      md5: 10737aed89ec62083844d4b9a0931b04
+      size: 44906
+    - path: reports/eda/demand_distribution.png
+      hash: md5
+      md5: 3acc621c2984428927285ca4d00f66ba
+      size: 50770
+    - path: reports/eda/demand_over_time.png
+      hash: md5
+      md5: 98064f0847de548258dd24a66f8a1414
+      size: 195262
+    - path: reports/eda/missing_values.png
+      hash: md5
+      md5: 397d4c3841383f30a97c8e10aef6fd89
+      size: 11128
+    - path: reports/eda/promotion_effect.png
+      hash: md5
+      md5: cc48e4ada642bc69e5ad7e0a58f75409
+      size: 28342
+    - path: reports/eda/summary_stats.csv
+      hash: md5
+      md5: 04a7c94232dd48b464ae655f87560dc9
+      size: 783
+  feature_engineering:
+    cmd: python src/3_feature_engineering.py
+    deps:
+    - path: data/processed/ingested.csv
+      hash: md5
+      md5: 5acad203895567bef9467363478e00cb
+      size: 4148634
+    - path: src/3_feature_engineering.py
+      hash: md5
+      md5: f8f0802e102e2ad11c32787d0b72c78e
+      size: 6639
+    - path: src/feature_engineering.py
+      hash: md5
+      md5: f4c050c4a7794c1af55a59a1440eaec6
+      size: 5039
+    params:
+      params.yaml:
+        feature_engineering.input_path: data/processed/ingested.csv
+        feature_engineering.manifest_output: 
+          data/processed/features_manifest.json
+        feature_engineering.preview_output: reports/features_preview.csv
+    outs:
+    - path: data/processed/features_manifest.json
+      hash: md5
+      md5: b68e2f3f302088fcc7535dfc38ff7849
+      size: 1824
+    - path: reports/features_preview.csv
+      hash: md5
+      md5: 70480991ff7b064585b6cd3a04d1a6af
+      size: 10384935
+  feature_selection:
+    cmd: python src/4_feature_selection.py
+    deps:
+    - path: data/processed/features_manifest.json
+      hash: md5
+      md5: b68e2f3f302088fcc7535dfc38ff7849
+      size: 1824
+    - path: src/4_feature_selection.py
+      hash: md5
+      md5: cbd389ce57071090c661a8d03d18558c
+      size: 6166
+    params:
+      params.yaml:
+        feature_selection.manifest_path: data/processed/features_manifest.json
+        feature_selection.output_path: data/processed/selected_features.json
+    outs:
+    - path: data/processed/selected_features.json
+      hash: md5
+      md5: 619ddbdcbb781329b050e11532341668
+      size: 1672
+  data_split:
+    cmd: python src/2_data_split.py
+    deps:
+    - path: data/processed/ingested.csv
+      hash: md5
+      md5: 5acad203895567bef9467363478e00cb
+      size: 4148634
+    - path: src/2_data_split.py
+      hash: md5
+      md5: 7d84892c6cb8d0d217e30255c44dd962
+      size: 6518
+    params:
+      params.yaml:
+        data_split.input_path: data/processed/ingested.csv
+        data_split.test_output: data/processed/test.csv
+        data_split.train_output: data/processed/train.csv
+        data_split.train_ratio: 0.7
+        data_split.val_output: data/processed/val.csv
+        data_split.val_ratio: 0.15
+    outs:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: 7250c1b0316e04027bcffa22171d49a9
+      size: 621280
+    - path: data/processed/train.csv
+      hash: md5
+      md5: 94ae3f81f5499f091327c6313bf75dcc
+      size: 2903544
+    - path: data/processed/val.csv
+      hash: md5
+      md5: 4467f30696303fe7536fa15114c5eb01
+      size: 624008
+  train:
+    cmd: python src/5_train.py
+    deps:
+    - path: data/processed/selected_features.json
+      hash: md5
+      md5: 619ddbdcbb781329b050e11532341668
+      size: 1672
+    - path: data/processed/train.csv
+      hash: md5
+      md5: 94ae3f81f5499f091327c6313bf75dcc
+      size: 2903544
+    - path: src/5_train.py
+      hash: md5
+      md5: cdc50103c1f2ab2dd6c7cf2f8e8c922d
+      size: 14870
+    - path: src/feature_engineering.py
+      hash: md5
+      md5: f4c050c4a7794c1af55a59a1440eaec6
+      size: 5039
+    params:
+      params.yaml:
+        train.cv_splits: 10
+        train.cv_test_size_ratio: 0.094
+        train.model_output: models/trained_pipeline.pkl
+        train.n_iter: 10
+        train.random_state: 42
+        train.run_id_output: mlflow_run_id.txt
+        train.selected_features_path: data/processed/selected_features.json
+        train.target_column: Demand
+        train.train_path: data/processed/train.csv
+    outs:
+    - path: mlflow_run_id.txt
+      hash: md5
+      md5: 380804a3bca0c821dcf6ff488e9bfa7a
+      size: 32
+    - path: models/trained_pipeline.pkl
+      hash: md5
+      md5: e09c41f0da0ea12fa8af6abfa1f8e93a
+      size: 1883899
+  evaluate:
+    cmd: python src/6_evaluate.py
+    deps:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: 7250c1b0316e04027bcffa22171d49a9
+      size: 621280
+    - path: mlflow_run_id.txt
+      hash: md5
+      md5: 380804a3bca0c821dcf6ff488e9bfa7a
+      size: 32
+    - path: models/trained_pipeline.pkl
+      hash: md5
+      md5: e09c41f0da0ea12fa8af6abfa1f8e93a
+      size: 1883899
+    - path: src/6_evaluate.py
+      hash: md5
+      md5: 7ff72fbbd15e453ab29de5e8c11920e8
+      size: 8224
+    params:
+      params.yaml:
+        evaluate.model_path: models/trained_pipeline.pkl
+        evaluate.output_path: reports/evaluation.json
+        evaluate.run_id_path: mlflow_run_id.txt
+        evaluate.target_column: Demand
+        evaluate.test_path: data/processed/test.csv
+    outs:
+    - path: reports/evaluation.json
+      hash: md5
+      md5: abefd99188c917ad938821da72488136
+      size: 610
+  save_model:
+    cmd: python src/7_save_model.py
+    deps:
+    - path: models/trained_pipeline.pkl
+      hash: md5
+      md5: e09c41f0da0ea12fa8af6abfa1f8e93a
+      size: 1883899
+    - path: reports/evaluation.json
+      hash: md5
+      md5: abefd99188c917ad938821da72488136
+      size: 610
+    - path: src/7_save_model.py
+      hash: md5
+      md5: 22735ba5b59a0b1855d43158396aaf62
+      size: 6258
+    params:
+      params.yaml:
+        save_model.evaluation_path: reports/evaluation.json
+        save_model.max_acceptable_mae:
+        save_model.model_path: models/trained_pipeline.pkl
+        save_model.production_path: demand_forecasting_pipeline.pkl
+    outs:
+    - path: demand_forecasting_pipeline.pkl
+      hash: md5
+      md5: e09c41f0da0ea12fa8af6abfa1f8e93a
+      size: 1883899

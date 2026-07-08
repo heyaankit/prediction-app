@@ -1,21 +1,35 @@
 """
-Stage 3 of the DVC pipeline for the prediction-app project.
+3_feature_engineering.py  (DVC Stage 3 runner)
+==============================================
+Stage 3 of the DVC pipeline. As a SCRIPT, this file:
+  - Loads data/processed/ingested.csv
+  - Produces data/processed/features_manifest.json  (consumed by stage 4)
+  - Produces reports/features_preview.csv            (human inspection)
 
+The FeatureEngineer CLASS itself lives in src/feature_engineering.py
+(the importable module). This split is necessary because:
+  - The `3_` prefix gives visual ordering in `ls src/`
+  - But Python module names can't start with a digit, so the class
+    must live in a normally-named file for pickle/joblib to work
+    across multiprocessing boundaries (sklearn workers) and at
+    serving time (main.py loading the .pkl).
 
-As a DVC stage, it runs `main()` which:
-   - Loads ingested.csv
-   - Fits the FeatureEngineer on the data
-   - Produces `data/processed/features_manifest.json` — a JSON listing ALL
-     features that the transformer WILL create. This manifest is consumed
-     by `feature_selection.py` (next stage).
-   - Produces `reports/features_preview.csv` — a sample of the transformed
-     data so you can eyeball the engineered features without running training.
-
-Input:  data/processed/ingested.csv   (produced by data_ingestion.py)
+Input:  data/processed/ingested.csv
 Outputs:
   - data/processed/features_manifest.json
   - reports/features_preview.csv
 
+dvc.yaml snippet:
+    stages:
+      feature_engineering:
+        cmd: python src/3_feature_engineering.py
+        deps:
+          - data/processed/ingested.csv
+          - src/3_feature_engineering.py
+          - src/feature_engineering.py    # class definition (dependency)
+        outs:
+          - data/processed/features_manifest.json
+          - reports/features_preview.csv
 """
 
 from __future__ import annotations
@@ -23,12 +37,21 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import yaml
-from sklearn.base import BaseEstimator, TransformerMixin
+
+# Make repo root importable, then import the FeatureEngineer class from
+# the importable module.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.feature_engineering import (
+    ALL_OUTPUT_FEATURES,
+    ENGINEERED_FEATURES,
+    REQUIRED_INPUT_COLUMNS,
+    FeatureEngineer,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -38,126 +61,14 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
     datefmt="%H:%M:%S",
 )
-log = logging.getLogger("feature_engineering")
+log = logging.getLogger("feature_engineering_stage")
 
 DEFAULT_PARAMS_PATH = "params.yaml"
 
-# Columns the FeatureEngineer expects to receive from data_ingestion.py
-REQUIRED_INPUT_COLUMNS = [
-    "Date",
-    "Price",
-    "Discount",
-    "Competitor Pricing",  # space, not underscore
-]
 
-# Features that the FeatureEngineer CREATES (output side)
-# Used to build features_manifest.json for the feature_selection stage.
-ENGINEERED_FEATURES = [
-    "Month_Sin",
-    "Month_Cos",
-    "DayOfWeek_Sin",
-    "DayOfWeek_Cos",
-    "Time_Step",
-    "Price_Gap",
-]
-
-# All features that exist AFTER transformation (engineered + retained raw)
-# This is the full menu from which feature_selection picks.
-ALL_OUTPUT_FEATURES = [
-    "Price",
-    "Discount",
-    "Competitor Pricing",
-    "Month_Sin",
-    "Month_Cos",
-    "DayOfWeek_Sin",
-    "DayOfWeek_Cos",
-    "Time_Step",
-    "Price_Gap",
-    "Region",
-    "Weather Condition",
-    "Category",
-    "Epidemic",
-    "Promotion",
-]
-
-
-# ===========================================================================
-# FeatureEngineer Transformer (notebook cells 5-8, 12)
-# ===========================================================================
-class FeatureEngineer(BaseEstimator, TransformerMixin):
-    """Sklearn transformer that engineers cyclical + ratio features from Date.
-
-    Mirrors notebook cells 5-8 and 12. Baked into the sklearn Pipeline in
-    train.py as the FIRST step, so the saved .pkl is self-contained.
-
-    Parameters
-    ----------
-    drop_date : bool, default True
-        Whether to drop the Date column after engineering (notebook cell 11).
-        Keep it True for training; set False only for debugging/EDA.
-
-    Attributes
-    ----------
-    min_date_ : pd.Timestamp
-        The minimum Date in the training data. Used as the origin for
-        Time_Step. Learned in fit() so there's no data leakage from val/test.
-    """
-
-    def __init__(self, drop_date: bool = True):
-        self.drop_date = drop_date
-
-    def fit(self, X: pd.DataFrame, y=None) -> "FeatureEngineer":
-        """Learn the Time_Step origin from training data only."""
-        if "Date" not in X.columns:
-            raise ValueError("FeatureEngineer requires a 'Date' column.")
-        dates = pd.to_datetime(X["Date"], errors="coerce")
-        self.min_date_ = dates.min()
-        log.info("FeatureEngineer.fit: min_date_ = %s", self.min_date_)
-        return self
-
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Apply all feature engineering steps (notebook cells 5-8, 12)."""
-        df = X.copy()
-
-        # --- Cell 5: parse Date ---
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        month = df["Date"].dt.month
-        dayofweek = df["Date"].dt.dayofweek
-
-        # --- Cell 6: cyclical encoding of month ---
-        df["Month_Sin"] = np.sin(2 * np.pi * month / 12)
-        df["Month_Cos"] = np.cos(2 * np.pi * month / 12)
-
-        # --- Cell 7: cyclical encoding of day of week ---
-        df["DayOfWeek_Sin"] = np.sin(2 * np.pi * dayofweek / 7)
-        df["DayOfWeek_Cos"] = np.cos(2 * np.pi * dayofweek / 7)
-
-        # --- Cell 8: Time_Step (days since min date in TRAINING data) ---
-        df["Time_Step"] = (df["Date"] - self.min_date_).dt.days
-
-        # --- Cell 12: Price_Gap (% diff vs competitor pricing) ---
-        # NOTE: notebook does not guard against divide-by-zero. We log a
-        # warning if it happens but follow the same formula for parity.
-        df["Price_Gap"] = (
-            (df["Price"] - df["Competitor Pricing"]) / df["Competitor Pricing"]
-        ) * 100
-        n_inf = np.isinf(df["Price_Gap"]).sum()
-        if n_inf > 0:
-            log.warning(
-                "%d rows produced +/-inf Price_Gap (Competitor Pricing == 0). "
-                "Consider handling upstream.", n_inf
-            )
-
-        # --- Cell 11 (partial): drop Date ---
-        if self.drop_date:
-            df = df.drop(columns=["Date"])
-
-        return df
-
-
-# ===========================================================================
-# DVC stage: produce manifest + preview
-# ===========================================================================
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
 def load_params(path: str = DEFAULT_PARAMS_PATH) -> dict:
     p = Path(path)
     if not p.exists():
@@ -180,15 +91,12 @@ def get_config(args: argparse.Namespace) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Manifest builder
+# ---------------------------------------------------------------------------
 def build_manifest() -> dict:
-    """Build the features manifest JSON consumed by feature_selection.py.
-
-    Lists every feature that exists AFTER the FeatureEngineer transforms the
-    data, along with its type ('numeric', 'categorical', 'binary') and source
-    ('raw' = retained from ingestion, 'engineered' = created by transformer).
-    """
+    """Build the features manifest JSON consumed by feature_selection.py."""
     type_map = {
-        # Raw retained
         "Price": "numeric",
         "Discount": "numeric",
         "Competitor Pricing": "numeric",
@@ -197,7 +105,6 @@ def build_manifest() -> dict:
         "Category": "categorical",
         "Epidemic": "binary",
         "Promotion": "binary",
-        # Engineered
         "Month_Sin": "numeric",
         "Month_Cos": "numeric",
         "DayOfWeek_Sin": "numeric",
@@ -211,7 +118,7 @@ def build_manifest() -> dict:
             "name": name,
             "type": type_map.get(name, "unknown"),
             "source": "engineered" if name in ENGINEERED_FEATURES else "raw",
-            "selected": True,  # default: all selected; feature_selection.py edits this
+            "selected": True,
         })
     return {
         "engineered_by_feature_engineer": ENGINEERED_FEATURES,
@@ -270,7 +177,6 @@ def main() -> None:
     df = pd.read_csv(in_path)
     log.info("Loaded %d rows x %d columns.", *df.shape)
 
-    # Validate required input columns
     missing = [c for c in REQUIRED_INPUT_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(
@@ -278,16 +184,13 @@ def main() -> None:
             f"Got: {list(df.columns)}"
         )
 
-    # Build + save manifest (consumed by feature_selection.py)
     manifest = build_manifest()
     save_manifest(manifest, cfg["manifest_output"])
-
-    # Generate preview (for human inspection)
     save_preview(df, cfg["preview_output"])
 
     log.info("Feature engineering stage complete.")
-    log.info("The FeatureEngineer transformer class is importable: "
-             "from src.feature_engineering import FeatureEngineer")
+    log.info("The FeatureEngineer class lives in src/feature_engineering.py "
+             "(importable module).")
 
 
 if __name__ == "__main__":

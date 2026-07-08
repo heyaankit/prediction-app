@@ -36,24 +36,18 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, RobustScaler
 from xgboost import XGBRegressor
 
-# Import the FeatureEngineer transformer from src/3_feature_engineering.py.
+# Import the FeatureEngineer transformer.
 #
-# Gotcha: Python module names cannot start with a digit, so we can't write
-# `from src.3_feature_engineering import FeatureEngineer` — that's a syntax
-# error. We use importlib to load the file by path instead.
+# The real class lives in src/3_feature_engineering.py, but Python module
+# names cannot start with a digit. We import via the src/feature_engineering.py
+# SHIM module, which loads the real file via importlib and re-exports the class.
 #
-# This requires the repo root to be on sys.path so joblib can unpickle the
-# saved Pipeline (which embeds a reference to this class).
-import importlib.util
-
+# The shim is critical for sklearn multiprocessing: RandomizedSearchCV(n_jobs=-1)
+# spawns worker processes via joblib. Each worker must be able to import
+# `feature_engineering` on its own (workers don't inherit sys.modules hacks
+# from the parent process). The shim file makes this work normally.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-_FE_PATH = Path(__file__).resolve().parent / "3_feature_engineering.py"
-_spec = importlib.util.spec_from_file_location("feature_engineering", _FE_PATH)
-_fe_module = importlib.util.module_from_spec(_spec)
-sys.modules["feature_engineering"] = _fe_module   # register for pickle
-_spec.loader.exec_module(_fe_module)
-FeatureEngineer = _fe_module.FeatureEngineer
+from src.feature_engineering import FeatureEngineer
 
 # ---------------------------------------------------------------------------
 # Logging

@@ -38,7 +38,6 @@ Run locally:
     uvicorn main:app --reload
 """
 
-import importlib.util
 import sys
 from pathlib import Path
 
@@ -47,23 +46,16 @@ import pandas as pd
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-# Ensure repo root is on sys.path AND pre-register the FeatureEngineer
-# class under the module name joblib will look for when unpickling the
-# saved Pipeline.
-#
-# Why this dance: the FeatureEngineer class lives in src/3_feature_engineering.py,
-# but Python module names cannot start with a digit, so we can't write
-# `from src.3_feature_engineering import FeatureEngineer`. We load it via
-# importlib and register it in sys.modules under the plain name
-# "feature_engineering" so pickle can find it.
-_repo_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(_repo_root))
+# Make repo root importable so `from src.feature_engineering import FeatureEngineer`
+# works (the saved Pipeline embeds a reference to this class; joblib needs to
+# resolve it when unpickling).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-_fe_path = _repo_root / "src" / "3_feature_engineering.py"
-_spec = importlib.util.spec_from_file_location("feature_engineering", _fe_path)
-_fe_module = importlib.util.module_from_spec(_spec)
-sys.modules["feature_engineering"] = _fe_module
-_spec.loader.exec_module(_fe_module)
+# Importing the shim registers FeatureEngineer under an importable module
+# name. Even though main.py doesn't directly use FeatureEngineer, the import
+# MUST happen before joblib.load() so pickle can resolve the class reference
+# stored inside the Pipeline.
+from src.feature_engineering import FeatureEngineer  # noqa: F401
 
 app = FastAPI(title="Demand Forecasting API")
 

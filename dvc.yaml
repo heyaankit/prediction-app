@@ -83,6 +83,7 @@ stages:
     deps:
       - data/processed/ingested.csv
       - src/3_feature_engineering.py
+      - src/feature_engineering.py    # FeatureEngineer class definition
     params:
       - feature_engineering.input_path
       - feature_engineering.manifest_output
@@ -134,7 +135,7 @@ stages:
       - data/processed/train.csv
       - data/processed/selected_features.json
       - src/5_train.py
-      - src/3_feature_engineering.py       # FeatureEngineer class is imported
+      - src/feature_engineering.py       # FeatureEngineer class (importable module)
     params:
       - train.train_path
       - train.selected_features_path

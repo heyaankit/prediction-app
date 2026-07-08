@@ -36,10 +36,24 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, RobustScaler
 from xgboost import XGBRegressor
 
-# Import the FeatureEngineer transformer defined in feature_engineering.py.
-# This requires the repo root to be on sys.path (DVC runs from repo root).
+# Import the FeatureEngineer transformer from src/3_feature_engineering.py.
+#
+# Gotcha: Python module names cannot start with a digit, so we can't write
+# `from src.3_feature_engineering import FeatureEngineer` — that's a syntax
+# error. We use importlib to load the file by path instead.
+#
+# This requires the repo root to be on sys.path so joblib can unpickle the
+# saved Pipeline (which embeds a reference to this class).
+import importlib.util
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.feature_engineering import FeatureEngineer
+
+_FE_PATH = Path(__file__).resolve().parent / "3_feature_engineering.py"
+_spec = importlib.util.spec_from_file_location("feature_engineering", _FE_PATH)
+_fe_module = importlib.util.module_from_spec(_spec)
+sys.modules["feature_engineering"] = _fe_module   # register for pickle
+_spec.loader.exec_module(_fe_module)
+FeatureEngineer = _fe_module.FeatureEngineer
 
 # ---------------------------------------------------------------------------
 # Logging

@@ -1,4 +1,17 @@
 """
+main.py
+=======
+FastAPI app that serves demand forecasts using the trained Pipeline.
+
+REFACTORED for the new DVC pipeline structure:
+----------------------------------------------
+Previously this file manually engineered features (Month_Sin, Time_Step,
+Price_Gap, etc.) before calling model.predict(). That was necessary
+because the OLD .pkl only contained the preprocessor + XGBRegressor.
+
+Now the saved Pipeline INCLUDES the FeatureEngineer transformer as its
+FIRST step, so the .pkl is self-contained. main.py just passes the raw
+fields and Pipeline does all the feature engineering automatically.
 
 What this file does:
   1. Loads demand_forecasting_pipeline.pkl at startup.
@@ -10,6 +23,10 @@ What this file does:
      + preprocessing + prediction in one call.
   5. Returns the predicted demand.
 
+Why this is better:
+  - No duplicate feature-engineering logic between training and serving.
+  - No risk of training/serving skew (e.g., different Time_Step origins).
+  - main.py is ~70 lines shorter and much easier to read.
 
 NOTE on the API input schema:
   The Pydantic DemandInput uses underscores (Competitor_Pricing) because
@@ -21,6 +38,7 @@ Run locally:
     uvicorn main:app --reload
 """
 
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -29,10 +47,23 @@ import pandas as pd
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-# Ensure src/ is importable so the FeatureEngineer class can be loaded
-# when joblib unpickles the Pipeline. (Without this, you'd get
-# "ModuleNotFoundError: No module named 'src'" on startup.)
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Ensure repo root is on sys.path AND pre-register the FeatureEngineer
+# class under the module name joblib will look for when unpickling the
+# saved Pipeline.
+#
+# Why this dance: the FeatureEngineer class lives in src/3_feature_engineering.py,
+# but Python module names cannot start with a digit, so we can't write
+# `from src.3_feature_engineering import FeatureEngineer`. We load it via
+# importlib and register it in sys.modules under the plain name
+# "feature_engineering" so pickle can find it.
+_repo_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(_repo_root))
+
+_fe_path = _repo_root / "src" / "3_feature_engineering.py"
+_spec = importlib.util.spec_from_file_location("feature_engineering", _fe_path)
+_fe_module = importlib.util.module_from_spec(_spec)
+sys.modules["feature_engineering"] = _fe_module
+_spec.loader.exec_module(_fe_module)
 
 app = FastAPI(title="Demand Forecasting API")
 

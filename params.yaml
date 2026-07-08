@@ -1,0 +1,94 @@
+# =============================================================================
+# params.yaml — Centralized configuration for all DVC pipeline stages.
+# =============================================================================
+# DVC tracks this file. When you change a value here, `dvc repro` knows
+# which stages depend on the changed params and reruns only those.
+#
+# Each top-level key corresponds to one pipeline stage. Each stage's .py
+# file reads its own section (e.g., `train:` section is read by train.py).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Data ingestion
+# -----------------------------------------------------------------------------
+data_ingestion:
+  raw_path: data/raw/demand_forecasting.csv   # DVC-tracked via `dvc add`
+  output_path: data/processed/ingested.csv
+  target_column: Demand
+  drop_columns:
+    - Inventory Level
+    - Units Sold
+    - Units Ordered
+    - Seasonality
+    - Store ID
+    - Product ID
+
+# -----------------------------------------------------------------------------
+# Stage 2: EDA
+# -----------------------------------------------------------------------------
+eda:
+  input_path: data/processed/ingested.csv
+  output_dir: reports/eda
+  target_column: Demand
+
+# -----------------------------------------------------------------------------
+# Stage 3: Feature engineering
+# (Defines the FeatureEngineer transformer + produces a features manifest)
+# -----------------------------------------------------------------------------
+feature_engineering:
+  input_path: data/processed/ingested.csv
+  manifest_output: data/processed/features_manifest.json
+  preview_output: reports/features_preview.csv
+
+# -----------------------------------------------------------------------------
+# Stage 4: Feature selection
+# (Produces selected_features.json — EDIT THIS FILE to experiment with
+# feature subsets. Set any feature's "selected" to false to drop it.)
+# -----------------------------------------------------------------------------
+feature_selection:
+  manifest_path: data/processed/features_manifest.json
+  output_path: data/processed/selected_features.json
+
+# -----------------------------------------------------------------------------
+# Stage 5: Data split (time-based 70/15/15)
+# -----------------------------------------------------------------------------
+data_split:
+  input_path: data/processed/ingested.csv
+  train_output: data/processed/train.csv
+  val_output: data/processed/val.csv
+  test_output: data/processed/test.csv
+  train_ratio: 0.70
+  val_ratio: 0.15
+
+# -----------------------------------------------------------------------------
+# Stage 6: Model training
+# -----------------------------------------------------------------------------
+train:
+  train_path: data/processed/train.csv
+  selected_features_path: data/processed/selected_features.json
+  model_output: models/trained_pipeline.pkl
+  run_id_output: mlflow_run_id.txt
+  target_column: Demand
+  cv_splits: 10
+  cv_test_size_ratio: 0.094        # notebook cell 37
+  n_iter: 10                        # notebook cell 42 (RandomizedSearchCV)
+  random_state: 42
+
+# -----------------------------------------------------------------------------
+# Stage 7: Evaluation
+# -----------------------------------------------------------------------------
+evaluate:
+  model_path: models/trained_pipeline.pkl
+  test_path: data/processed/test.csv
+  run_id_path: mlflow_run_id.txt
+  output_path: reports/evaluation.json
+  target_column: Demand
+
+# -----------------------------------------------------------------------------
+# Stage 8: Save / promote model to production
+# -----------------------------------------------------------------------------
+save_model:
+  model_path: models/trained_pipeline.pkl
+  evaluation_path: reports/evaluation.json
+  production_path: demand_forecasting_pipeline.pkl   # what main.py loads
+  max_acceptable_mae: null           # set a number (e.g. 50.0) to enable quality gate

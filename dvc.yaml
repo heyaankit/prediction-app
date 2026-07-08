@@ -1,0 +1,186 @@
+# =============================================================================
+# dvc.yaml — DVC pipeline definition for the prediction-app project.
+# =============================================================================
+# Reproduce the entire pipeline:   dvc repro
+# Reproduce from a specific stage:  dvc repro train
+# View the DAG:                     dvc dag
+# Check what changed:               dvc status
+#
+# Pipeline DAG:
+#
+#   raw CSV (dvc-tracked)
+#       │
+#       ▼
+#   data_ingestion ──► ingested.csv
+#       │
+#       ├──► eda ──► reports/eda/*.png + summary_stats.csv
+#       │
+#       ├──► feature_engineering ──► features_manifest.json + features_preview.csv
+#       │                                  │
+#       │                                  ▼
+#       │                          feature_selection ──► selected_features.json
+#       │                                  │
+#       └──► data_split ──► train.csv      │
+#                          val.csv         │
+#                          test.csv        │
+#                              │           │
+#                              ▼           ▼
+#                            train ──► trained_pipeline.pkl + mlflow_run_id.txt
+#                              │
+#                              ▼
+#                          evaluate ──► evaluation.json
+#                              │
+#                              ▼
+#                          save_model ──► demand_forecasting_pipeline.pkl
+#
+# =============================================================================
+
+stages:
+  # ---------------------------------------------------------------------------
+  # Stage 1: Data ingestion
+  # ---------------------------------------------------------------------------
+  data_ingestion:
+    cmd: python src/data_ingestion.py
+    deps:
+      - data/raw/demand_forecasting.csv
+      - src/data_ingestion.py
+    params:
+      - data_ingestion.raw_path
+      - data_ingestion.output_path
+      - data_ingestion.target_column
+      - data_ingestion.drop_columns
+    outs:
+      - data/processed/ingested.csv
+
+  # ---------------------------------------------------------------------------
+  # Stage 2: EDA (produces plots + stats; tracked by DVC)
+  # ---------------------------------------------------------------------------
+  eda:
+    cmd: python src/eda.py
+    deps:
+      - data/processed/ingested.csv
+      - src/eda.py
+    params:
+      - eda.input_path
+      - eda.output_dir
+      - eda.target_column
+    outs:
+      - reports/eda/missing_values.png
+      - reports/eda/demand_distribution.png
+      - reports/eda/demand_by_region.png
+      - reports/eda/demand_by_weather.png
+      - reports/eda/demand_by_category.png
+      - reports/eda/promotion_effect.png
+      - reports/eda/demand_over_time.png
+      - reports/eda/correlation_heatmap.png
+      - reports/eda/summary_stats.csv
+
+  # ---------------------------------------------------------------------------
+  # Stage 3: Feature engineering (defines transformer + produces manifest)
+  # ---------------------------------------------------------------------------
+  feature_engineering:
+    cmd: python src/feature_engineering.py
+    deps:
+      - data/processed/ingested.csv
+      - src/feature_engineering.py
+    params:
+      - feature_engineering.input_path
+      - feature_engineering.manifest_output
+      - feature_engineering.preview_output
+    outs:
+      - data/processed/features_manifest.json
+      - reports/features_preview.csv
+
+  # ---------------------------------------------------------------------------
+  # Stage 4: Feature selection (produces editable selected_features.json)
+  # ---------------------------------------------------------------------------
+  feature_selection:
+    cmd: python src/feature_selection.py
+    deps:
+      - data/processed/features_manifest.json
+      - src/feature_selection.py
+    params:
+      - feature_selection.manifest_path
+      - feature_selection.output_path
+    outs:
+      - data/processed/selected_features.json
+
+  # ---------------------------------------------------------------------------
+  # Stage 5: Data split (time-based 70/15/15)
+  # ---------------------------------------------------------------------------
+  data_split:
+    cmd: python src/data_split.py
+    deps:
+      - data/processed/ingested.csv
+      - src/data_split.py
+    params:
+      - data_split.input_path
+      - data_split.train_output
+      - data_split.val_output
+      - data_split.test_output
+      - data_split.train_ratio
+      - data_split.val_ratio
+    outs:
+      - data/processed/train.csv
+      - data/processed/val.csv
+      - data/processed/test.csv
+
+  # ---------------------------------------------------------------------------
+  # Stage 6: Model training
+  # ---------------------------------------------------------------------------
+  train:
+    cmd: python src/train.py
+    deps:
+      - data/processed/train.csv
+      - data/processed/selected_features.json
+      - src/train.py
+      - src/feature_engineering.py          # FeatureEngineer class is imported
+    params:
+      - train.train_path
+      - train.selected_features_path
+      - train.model_output
+      - train.run_id_output
+      - train.target_column
+      - train.cv_splits
+      - train.cv_test_size_ratio
+      - train.n_iter
+      - train.random_state
+    outs:
+      - models/trained_pipeline.pkl
+      - mlflow_run_id.txt
+
+  # ---------------------------------------------------------------------------
+  # Stage 7: Evaluation
+  # ---------------------------------------------------------------------------
+  evaluate:
+    cmd: python src/evaluate.py
+    deps:
+      - models/trained_pipeline.pkl
+      - data/processed/test.csv
+      - mlflow_run_id.txt
+      - src/evaluate.py
+    params:
+      - evaluate.model_path
+      - evaluate.test_path
+      - evaluate.run_id_path
+      - evaluate.output_path
+      - evaluate.target_column
+    outs:
+      - reports/evaluation.json
+
+  # ---------------------------------------------------------------------------
+  # Stage 8: Save / promote model to production
+  # ---------------------------------------------------------------------------
+  save_model:
+    cmd: python src/save_model.py
+    deps:
+      - models/trained_pipeline.pkl
+      - reports/evaluation.json
+      - src/save_model.py
+    params:
+      - save_model.model_path
+      - save_model.evaluation_path
+      - save_model.production_path
+      - save_model.max_acceptable_mae
+    outs:
+      - demand_forecasting_pipeline.pkl

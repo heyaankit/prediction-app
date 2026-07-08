@@ -1,9 +1,34 @@
+# =============================================================================
+# requirements.txt — prediction-app
+# =============================================================================
+# Install with:  pip install -r requirements.txt
+# Reproduce DVC pipeline:  dvc repro
+# Serve the API:  uvicorn main:app --reload
+# =============================================================================
+
+# --- API server ---
 fastapi
-uvicorn
-joblib
+uvicorn[standard]
+
+# --- Data manipulation ---
 pandas
+numpy
+
+# --- ML / sklearn stack (must match the version the model was trained with) ---
 scikit-learn==1.6.1
 xgboost
 category_encoders
+
+# --- Model persistence ---
+joblib
+
+# --- Experiment tracking ---
 mlflow
+
+# --- DVC pipeline ---
 dvc
+pyyaml            # all src/*.py stages read params.yaml
+
+# --- EDA plotting (used by src/eda.py) ---
+matplotlib
+seaborn

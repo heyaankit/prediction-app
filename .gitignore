@@ -1,3 +1,105 @@
-.venv
-__pycache__//
-/data
+# =============================================================================
+# .gitignore — prediction-app
+# =============================================================================
+# DVC-managed data, models, and reports live in the repo but are NOT
+# committed to git — DVC tracks them via .dvc files and the local/remote
+# DVC storage. Code, configs, and small metadata files ARE committed.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# DVC — ignore data/model/report CONTENTS but keep the .dvc pointer files
+# ---------------------------------------------------------------------------
+# IMPORTANT gitignore gotcha: a bare `!*.dvc` only re-includes .dvc files
+# at the REPO ROOT, not nested ones. To re-include nested .dvc pointers,
+# you must use explicit paths matching the original ignore patterns.
+#
+# Pattern: ignore everything inside a dir with `dir/*` (NOT `dir/`, which
+# would ignore the dir itself and prevent any re-inclusion), then
+# re-include `*.dvc` and `.gitkeep` with explicit paths.
+
+# data/raw/ — raw dataset (DVC-tracked)
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/*.dvc
+
+# data/processed/ — ingested/train/val/test CSVs (DVC-tracked)
+data/processed/*
+!data/processed/.gitkeep
+!data/processed/*.dvc
+
+# models/ — trained_pipeline.pkl (DVC-tracked)
+models/*
+!models/.gitkeep
+!models/*.dvc
+
+# reports/ — EDA plots, evaluation.json, features_preview.csv (DVC-tracked)
+reports/*
+!reports/.gitkeep
+!reports/**/*.dvc
+
+# dvc.lock — pins exact dependency/output versions for reproducibility.
+# COMMIT it (do not ignore) so anyone cloning the repo gets the same
+# pipeline state. Removing it forces `dvc repro` to recompute everything.
+
+# DVC internal cache — never commit
+/.dvc/cache
+/.dvc/tmp
+
+# ---------------------------------------------------------------------------
+# MLflow — local tracking server artifacts
+# ---------------------------------------------------------------------------
+mlflow.db
+mlflow.db-journal
+mlruns/
+mlartifacts/
+
+# ---------------------------------------------------------------------------
+# Trained model artifacts (also DVC-tracked; keep .pkl out of git)
+# ---------------------------------------------------------------------------
+*.pkl
+demand_forecasting_pipeline.pkl
+demand_forecasting_pipeline.meta.json
+
+# ---------------------------------------------------------------------------
+# Run-level ephemeral files
+# ---------------------------------------------------------------------------
+mlflow_run_id.txt
+
+# ---------------------------------------------------------------------------
+# OS / editor
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+*.log
+logs/

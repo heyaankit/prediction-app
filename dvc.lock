@@ -1,0 +1,30 @@
+schema: '2.0'
+stages:
+  data_ingestion:
+    cmd: python src/1_data_ingestion.py
+    deps:
+    - path: data/raw/demand_forecasting.csv
+      hash: md5
+      md5: 43161d2044f30cb4bc7e4e8f749f9aa9
+      size: 6346402
+    - path: src/1_data_ingestion.py
+      hash: md5
+      md5: 829e45826e90cae5ff32e9132ec849ca
+      size: 10574
+    params:
+      params.yaml:
+        data_ingestion.drop_columns:
+        - Inventory Level
+        - Units Sold
+        - Units Ordered
+        - Seasonality
+        - Store ID
+        - Product ID
+        data_ingestion.output_path: data/processed/ingested.csv
+        data_ingestion.raw_path: data/raw/demand_forecasting.csv
+        data_ingestion.target_column: Demand
+    outs:
+    - path: data/processed/ingested.csv
+      hash: md5
+      md5: 5acad203895567bef9467363478e00cb
+      size: 4148634
